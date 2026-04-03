@@ -1,53 +1,39 @@
 /**
  * MOL/SDF file format reader and writer (MDL V2000).
- * Supports reading V2000 MOL blocks and writing V2000 MOL blocks.
  */
-import { Molecule } from './molecule.js'
-import { BondOrder, BondStereo } from './bond.js'
+import { Molecule } from './molecule'
+import { BondOrder, BondStereo, type BondOrderValue, type BondStereoValue } from './bond'
 
-// ─── Writer ───────────────────────────────────────────────────────────────────
+export function moleculeToMolfile(mol: Molecule): string {
+  const lines: string[] = []
 
-/**
- * Serialise a Molecule to a MOL (V2000) string.
- * @param {import('./molecule.js').Molecule} mol
- * @returns {string}
- */
-export function moleculeToMolfile(mol) {
-  const lines = []
-
-  // Header block (3 lines)
   lines.push(mol.name || '')
   lines.push('  ChemSchema 2D')
   lines.push('')
 
-  // Counts line
   const na = mol.atoms.length
   const nb = mol.bonds.length
   lines.push(
     `${na.toString().padStart(3)}${nb.toString().padStart(3)}  0  0  0  0  0  0  0  0999 V2000`,
   )
 
-  // Atom block
   for (const atom of mol.atoms) {
-    const x   = atom.x.toFixed(4).padStart(10)
-    const y   = atom.y.toFixed(4).padStart(10)
-    const z   = (atom.z ?? 0).toFixed(4).padStart(10)
-    const sym = atom.symbol.padEnd(3)
-    const mDiff = 0
+    const x      = atom.x.toFixed(4).padStart(10)
+    const y      = atom.y.toFixed(4).padStart(10)
+    const z      = (atom.z ?? 0).toFixed(4).padStart(10)
+    const sym    = atom.symbol.padEnd(3)
     const charge = mdlCharge(atom.charge)
     lines.push(`${x}${y}${z} ${sym} 0${charge.toString().padStart(3)}  0  0  0  0  0  0  0  0  0  0`)
   }
 
-  // Bond block
   for (const bond of mol.bonds) {
-    const a1    = (bond.beginAtom + 1).toString().padStart(3)
-    const a2    = (bond.endAtom   + 1).toString().padStart(3)
-    const order = mdlBondOrder(bond.order).toString().padStart(3)
+    const a1     = (bond.beginAtom + 1).toString().padStart(3)
+    const a2     = (bond.endAtom   + 1).toString().padStart(3)
+    const order  = mdlBondOrder(bond.order).toString().padStart(3)
     const stereo = mdlStereo(bond.stereo).toString().padStart(3)
     lines.push(`${a1}${a2}${order}${stereo}  0  0  0`)
   }
 
-  // Charge properties
   const chargedAtoms = mol.atoms.filter((a) => a.charge !== 0)
   for (let i = 0; i < chargedAtoms.length; i += 8) {
     const batch = chargedAtoms.slice(i, i + 8)
@@ -58,7 +44,6 @@ export function moleculeToMolfile(mol) {
     lines.push(line)
   }
 
-  // Isotope properties
   const isotopeAtoms = mol.atoms.filter((a) => a.isotope > 0)
   for (let i = 0; i < isotopeAtoms.length; i += 8) {
     const batch = isotopeAtoms.slice(i, i + 8)
@@ -73,13 +58,9 @@ export function moleculeToMolfile(mol) {
   return lines.join('\n')
 }
 
-/**
- * Serialise a Molecule to an SDF (V2000) string.
- * An SDF file is a MOL block followed by properties block and $$$$.
- */
-export function moleculeToSdf(mol) {
+export function moleculeToSdf(mol: Molecule): string {
   const molblock = moleculeToMolfile(mol)
-  const propLines = []
+  const propLines: string[] = []
   for (const [key, val] of Object.entries(mol.properties ?? {})) {
     propLines.push(`> <${key}>`)
     propLines.push(String(val))
@@ -88,22 +69,16 @@ export function moleculeToSdf(mol) {
   return `${molblock}\n${propLines.join('\n')}\n$$$$\n`
 }
 
-/**
- * Parse multiple molecules from an SDF string.
- * @param {string} sdf
- * @returns {Molecule[]}
- */
-export function parseSdf(sdf) {
-  const mols = []
+export function parseSdf(sdf: string): Molecule[] {
+  const mols: Molecule[] = []
   const records = sdf.split('$$$$')
   for (const record of records) {
     const trimmed = record.trim()
     if (!trimmed) continue
     const mol = parseMolfile(trimmed)
-    // Parse property block
     const propSection = trimmed.split('M  END')[1] ?? ''
     const propLines = propSection.split('\n')
-    let propKey = null
+    let propKey: string | null = null
     for (const line of propLines) {
       const headerMatch = line.match(/^>\s*<(.+)>/)
       if (headerMatch) {
@@ -120,36 +95,25 @@ export function parseSdf(sdf) {
   return mols
 }
 
-// ─── Reader ───────────────────────────────────────────────────────────────────
-
-/**
- * Parse a MOL (V2000) string into a Molecule.
- * @param {string} moltext
- * @returns {Molecule}
- */
-export function parseMolfile(moltext) {
+export function parseMolfile(moltext: string): Molecule {
   const mol   = new Molecule()
   const lines = moltext.replace(/\r\n/g, '\n').split('\n')
 
-  // Header
   mol.name = lines[0]?.trim() ?? ''
 
-  // Counts line (index 3)
   const countsLine = lines[3] ?? ''
   const numAtoms   = parseInt(countsLine.slice(0, 3), 10)
   const numBonds   = parseInt(countsLine.slice(3, 6), 10)
 
   if (isNaN(numAtoms) || isNaN(numBonds)) return mol
 
-  // Atom block starts at line 4
   for (let i = 0; i < numAtoms; i++) {
-    const line = lines[4 + i] ?? ''
+    const line   = lines[4 + i] ?? ''
     const x      = parseFloat(line.slice(0,  10))
     const y      = parseFloat(line.slice(10, 20))
     const z      = parseFloat(line.slice(20, 30))
     const symbol = line.slice(31, 34).trim()
-    const dd     = parseInt(line.slice(36, 39), 10) || 0  // mass difference (obsolete)
-    const chCd   = parseInt(line.slice(39, 42), 10) || 0  // charge code
+    const chCd   = parseInt(line.slice(39, 42), 10) || 0
     mol.addAtom({
       symbol,
       x: isNaN(x) ? 0 : x,
@@ -159,23 +123,20 @@ export function parseMolfile(moltext) {
     })
   }
 
-  // Bond block
   const bondStart = 4 + numAtoms
   for (let i = 0; i < numBonds; i++) {
-    const line = lines[bondStart + i] ?? ''
-    const a1    = parseInt(line.slice(0, 3), 10) - 1
-    const a2    = parseInt(line.slice(3, 6), 10) - 1
-    const order = fromMdlBondOrder(parseInt(line.slice(6, 9), 10) || 1)
+    const line   = lines[bondStart + i] ?? ''
+    const a1     = parseInt(line.slice(0, 3), 10) - 1
+    const a2     = parseInt(line.slice(3, 6), 10) - 1
+    const order  = fromMdlBondOrder(parseInt(line.slice(6, 9), 10) || 1)
     const stereo = fromMdlStereo(parseInt(line.slice(9, 12), 10) || 0)
     mol.addBond({ beginAtom: a1, endAtom: a2, order, stereo })
   }
 
-  // Property block
   for (let i = bondStart + numBonds; i < lines.length; i++) {
     const line = lines[i]
     if (!line || line === 'M  END') break
 
-    // M  CHG
     if (line.startsWith('M  CHG')) {
       const n = parseInt(line.slice(6, 9), 10)
       for (let j = 0; j < n; j++) {
@@ -185,7 +146,6 @@ export function parseMolfile(moltext) {
       }
     }
 
-    // M  ISO
     if (line.startsWith('M  ISO')) {
       const n = parseInt(line.slice(6, 9), 10)
       for (let j = 0; j < n; j++) {
@@ -199,35 +159,29 @@ export function parseMolfile(moltext) {
   return mol
 }
 
-// ─── MDL code conversions ─────────────────────────────────────────────────────
-
-function mdlCharge(charge) {
-  // MDL charge codes (V2000)
-  const map = { 3: 1, 2: 2, 1: 3, 0: 0, 5: -1, 6: -2, 7: -3 }
-  // Return atom-block charge code (field 6 – obsolete but widely parsed)
-  // Modern files use M  CHG; return 0 here
+function mdlCharge(_charge: number): number {
   return 0
 }
 
-function fromMdlCharge(code) {
-  const map = { 1: 3, 2: 2, 3: 1, 4: 0, 5: -1, 6: -2, 7: -3, 0: 0 }
+function fromMdlCharge(code: number): number {
+  const map: Record<number, number> = { 1: 3, 2: 2, 3: 1, 4: 0, 5: -1, 6: -2, 7: -3, 0: 0 }
   return map[code] ?? 0
 }
 
-function mdlBondOrder(order) {
+function mdlBondOrder(order: BondOrderValue): number {
   if (order === BondOrder.AROMATIC) return 4
   return order
 }
 
-function fromMdlBondOrder(code) {
+function fromMdlBondOrder(code: number): BondOrderValue {
   if (code === 4) return BondOrder.AROMATIC
-  return code  // 1, 2, 3 map directly
+  return code as BondOrderValue
 }
 
-function mdlStereo(stereo) {
+function mdlStereo(stereo: BondStereoValue): number {
   return stereo
 }
 
-function fromMdlStereo(code) {
-  return code
+function fromMdlStereo(code: number): BondStereoValue {
+  return code as BondStereoValue
 }

@@ -1,20 +1,28 @@
 /**
  * REST API client for the ChemSchema Django backend.
- *
- * The REST endpoints mirror the gRPC service but use JSON over HTTP/1.1.
- * Base URL is read from the VITE_REST_URL environment variable (default:
- * http://localhost:8000/api/v1).
- *
- * Usage:
- *   import { createRestClient } from '@/lib/rest/client.js'
- *   const api = createRestClient('http://localhost:8000/api/v1')
- *   const props = await api.getProperties('c1ccccc1')
  */
 
-export function createRestClient(baseUrl, options = {}) {
+export interface RestClientOptions {
+  headers?: Record<string, string>
+  signal?: AbortSignal
+}
+
+export interface RestClient {
+  convertFormat(data: string, fromFormat: string, toFormat: string): Promise<unknown>
+  canonicalize(smiles: string): Promise<unknown>
+  getProperties(smiles: string): Promise<unknown>
+  depict2D(smiles: string, width?: number, height?: number): Promise<unknown>
+  search(query: string, searchType?: string, threshold?: number, maxResults?: number): Promise<unknown>
+  listMolecules(page?: number, pageSize?: number): Promise<unknown>
+  getMolecule(id: string): Promise<unknown>
+  saveMolecule(molecule: unknown): Promise<unknown>
+  deleteMolecule(id: string): Promise<unknown>
+}
+
+export function createRestClient(baseUrl: string, options: RestClientOptions = {}): RestClient {
   const base = baseUrl.replace(/\/$/, '')
 
-  async function post(path, body) {
+  async function post(path: string, body: unknown): Promise<unknown> {
     const res = await fetch(`${base}${path}`, {
       method: 'POST',
       headers: {
@@ -32,8 +40,8 @@ export function createRestClient(baseUrl, options = {}) {
     return res.json()
   }
 
-  async function get(path, params = {}) {
-    const qs = new URLSearchParams(params).toString()
+  async function get(path: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    const qs  = new URLSearchParams(params as Record<string, string>).toString()
     const url = qs ? `${base}${path}?${qs}` : `${base}${path}`
     const res = await fetch(url, {
       headers: {
@@ -50,50 +58,31 @@ export function createRestClient(baseUrl, options = {}) {
   }
 
   return {
-    /** Convert between chemistry formats */
     convertFormat(data, fromFormat, toFormat) {
       return post('/convert/', { data, from_format: fromFormat, to_format: toFormat })
     },
-
-    /** Canonicalize a SMILES string */
     canonicalize(smiles) {
       return post('/canonicalize/', { smiles })
     },
-
-    /** Get molecular properties */
     getProperties(smiles) {
       return post('/properties/', { smiles })
     },
-
-    /** Generate 2D coordinates + SVG */
     depict2D(smiles, width = 300, height = 200) {
       return post('/depict/', { smiles, width, height })
     },
-
-    /** Search the molecule registry */
     search(query, searchType = 'substructure', threshold = 0.7, maxResults = 50) {
-      return post('/search/', {
-        query,
-        search_type: searchType,
-        threshold,
-        max_results: maxResults,
-      })
+      return post('/search/', { query, search_type: searchType, threshold, max_results: maxResults })
     },
-
-    /** List molecules in the registry */
     listMolecules(page = 1, pageSize = 20) {
       return get('/molecules/', { page, page_size: pageSize })
     },
-
-    /** Get a single molecule by ID */
     getMolecule(id) {
       return get(`/molecules/${id}/`)
     },
-
-    /** Save a molecule */
     saveMolecule(molecule) {
-      if (molecule.id) {
-        return fetch(`${base}/molecules/${molecule.id}/`, {
+      const mol = molecule as { id?: string }
+      if (mol.id) {
+        return fetch(`${base}/molecules/${mol.id}/`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(molecule),
@@ -102,8 +91,6 @@ export function createRestClient(baseUrl, options = {}) {
       }
       return post('/molecules/', molecule)
     },
-
-    /** Delete a molecule */
     deleteMolecule(id) {
       return fetch(`${base}/molecules/${id}/`, {
         method: 'DELETE',
@@ -113,18 +100,16 @@ export function createRestClient(baseUrl, options = {}) {
   }
 }
 
-// ─── Singleton factory ────────────────────────────────────────────────────────
+let _defaultClient: RestClient | null = null
 
-let _defaultClient = null
-
-export function getDefaultRestClient() {
+export function getDefaultRestClient(): RestClient {
   if (!_defaultClient) {
-    const base = import.meta.env?.VITE_REST_URL ?? 'http://localhost:8000/api/v1'
+    const base = (import.meta as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_REST_URL ?? 'http://localhost:8000/api/v1'
     _defaultClient = createRestClient(base)
   }
   return _defaultClient
 }
 
-export function setDefaultRestClient(client) {
+export function setDefaultRestClient(client: RestClient): void {
   _defaultClient = client
 }

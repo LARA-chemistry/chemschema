@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import vueJsx from '@vitejs/plugin-vue-jsx'
 import { resolve } from 'path'
 
-// Library build – produces an ESM + UMD bundle
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), vueJsx()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -12,22 +12,20 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.js'),
+      entry: resolve(__dirname, 'src/index.ts'),
       name: 'ChemSchemaEditor',
       fileName: (format) => `chemschema-editor.${format === 'es' ? 'js' : 'umd.cjs'}`,
     },
     rollupOptions: {
-      // Vue must not be bundled – consumers supply it
       external: ['vue'],
       output: {
         exports: 'named',
         globals: {
           vue: 'Vue',
         },
-        // Preserve CSS file
         assetFileNames: (assetInfo) => {
           if (assetInfo.name === 'style.css') return 'style.css'
-          return assetInfo.name
+          return assetInfo.name ?? 'asset'
         },
       },
     },

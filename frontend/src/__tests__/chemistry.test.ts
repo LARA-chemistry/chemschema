@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { Atom } from '../lib/chemistry/atom.js'
-import { Bond, BondOrder } from '../lib/chemistry/bond.js'
-import { Molecule } from '../lib/chemistry/molecule.js'
-import { moleculeToSmiles, smilesParser } from '../lib/chemistry/smiles.js'
-import { moleculeToMolfile, parseMolfile } from '../lib/chemistry/molfile.js'
+import { Atom } from '../lib/chemistry/atom'
+import { Bond, BondOrder } from '../lib/chemistry/bond'
+import { Molecule } from '../lib/chemistry/molecule'
+import { moleculeToSmiles, smilesParser } from '../lib/chemistry/smiles'
+import { moleculeToMolfile, parseMolfile } from '../lib/chemistry/molfile'
 
 // ─── Atom ────────────────────────────────────────────────────────────────────
 
