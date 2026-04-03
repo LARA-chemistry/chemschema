@@ -50,6 +50,9 @@ class TestChemSchemaServicer(TestCase):
         result = self.svc.Canonicalize(req, self.ctx)
         self.assertIn("ok", result)
         self.assertIn("smiles", result)
+        # SMILES must be a non-empty string (canonical or original fallback)
+        self.assertIsInstance(result["smiles"], str)
+        self.assertTrue(len(result["smiles"]) > 0)
 
     def test_canonicalize_returns_ok_or_rdkit_error(self):
         """Accepts both success (RDKit present) and graceful failure stub."""
@@ -58,6 +61,12 @@ class TestChemSchemaServicer(TestCase):
         # ok is True when RDKit is available, False otherwise
         self.assertIsInstance(result["ok"], bool)
         self.assertIn("smiles", result)
+        if result["ok"]:
+            # RDKit available: ethanol should canonicalize to "CCO"
+            self.assertEqual(result["smiles"], "CCO")
+        else:
+            # Stub mode: original SMILES is echoed back
+            self.assertEqual(result["smiles"], "CCO")
 
     def test_canonicalize_invalid_smiles_handled(self):
         req = _req(smiles="not-a-smiles!!!")
@@ -92,10 +101,18 @@ class TestChemSchemaServicer(TestCase):
         self.assertIn("<svg", result["svg"])
 
     def test_depict2d_uses_default_dimensions(self):
-        """Servicer falls back to width=300/height=200 when attrs are absent."""
+        """Servicer falls back to width=300/height=200 when attrs are absent.
+
+        The stub SVG (returned when RDKit is unavailable) embeds the width and
+        height values; validate they reflect the defaults.
+        """
         req = _req(smiles="c1ccccc1")
         result = self.svc.Depict2D(req, self.ctx)
         self.assertIn("svg", result)
+        svg = result["svg"]
+        # Both stub and RDKit SVGs include the dimensions in the <svg> element
+        self.assertIn("300", svg)
+        self.assertIn("200", svg)
 
     def test_depict2d_invalid_smiles_handled(self):
         req = _req(smiles="NOTSMILES", width=100, height=100)
@@ -121,6 +138,12 @@ class TestChemSchemaServicer(TestCase):
         result = self.svc.ConvertFormat(req, self.ctx)
         self.assertIn("ok", result)
         self.assertIn("data", result)
+        if result["ok"]:
+            # RDKit available: result should be a valid InChI string
+            self.assertTrue(
+                result["data"].startswith("InChI="),
+                f"Expected InChI string, got: {result['data']!r}",
+            )
 
     # ── Search ────────────────────────────────────────────────────────────────
 
@@ -129,11 +152,15 @@ class TestChemSchemaServicer(TestCase):
         result = self.svc.Search(req, self.ctx)
         self.assertIn("results", result)
         self.assertIn("ok", result)
+        # results must be a list
+        self.assertIsInstance(result["results"], list)
 
     def test_search_ok_is_true(self):
         req = _req(query="benzene", search_type=0, threshold=0.7, max_results=50)
         result = self.svc.Search(req, self.ctx)
         self.assertTrue(result["ok"])
+        # Current stub always returns an empty list; it must not exceed max_results
+        self.assertLessEqual(len(result["results"]), 50)
 
     # ── Format name helper ────────────────────────────────────────────────────
 
