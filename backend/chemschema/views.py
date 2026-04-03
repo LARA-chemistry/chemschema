@@ -1,143 +1,184 @@
 """
-REST API views for ChemSchema.
+REST API views for ChemSchema built with django-ninja.
 """
 
 from __future__ import annotations
 
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.request import Request
-from rest_framework.response import Response
-from rest_framework.views import APIView
+from typing import List
+from ninja import NinjaAPI, Router
+from ninja.responses import Status
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
 
 from .chemistry import canonicalize, convert_format, depict_2d, get_properties
 from .models import MoleculeRecord, ReactionRecord
-from .serializers import (
-    CanonicalizeSerializer,
-    ConvertRequestSerializer,
-    Depict2DRequestSerializer,
-    MoleculeRecordSerializer,
-    PropertiesRequestSerializer,
-    ReactionRecordSerializer,
-    SearchRequestSerializer,
+from .schemas import (
+    CanonicalizeRequest,
+    CanonicalizeResponse,
+    ConvertRequest,
+    ConvertResponse,
+    Depict2DRequest,
+    Depict2DResponse,
+    MoleculeIn,
+    MoleculeOut,
+    MoleculePatch,
+    PropertiesRequest,
+    PropertiesResponse,
+    ReactionIn,
+    ReactionOut,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
 )
 
+api = NinjaAPI(title="ChemSchema API", version="1.0.0")
 
-# ── Molecule registry CRUD ────────────────────────────────────────────────────
+# ── Molecule registry ─────────────────────────────────────────────────────────
 
-
-class MoleculeViewSet(viewsets.ModelViewSet):
-    """CRUD operations for the molecule registry."""
-
-    queryset = MoleculeRecord.objects.all()
-    serializer_class = MoleculeRecordSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        name = self.request.query_params.get("name")
-        if name:
-            qs = qs.filter(name__icontains=name)
-        formula = self.request.query_params.get("formula")
-        if formula:
-            qs = qs.filter(molecular_formula__iexact=formula)
-        return qs
-
-    @action(detail=False, methods=["get"], url_path="search")
-    def search(self, request: Request) -> Response:
-        """Simple text-based search across name, SMILES, and InChIKey."""
-        q = request.query_params.get("q", "")
-        if not q:
-            return Response([], status=status.HTTP_200_OK)
-        qs = MoleculeRecord.objects.filter(
-            name__icontains=q
-        ) | MoleculeRecord.objects.filter(
-            smiles__icontains=q
-        ) | MoleculeRecord.objects.filter(
-            inchikey__iexact=q
-        )
-        serializer = MoleculeRecordSerializer(qs, many=True)
-        return Response(serializer.data)
+molecules = Router(tags=["molecules"])
 
 
-class ReactionViewSet(viewsets.ModelViewSet):
-    """CRUD operations for the reaction registry."""
+@molecules.get("/", response=List[MoleculeOut])
+def list_molecules(request, name: str = "", formula: str = ""):
+    qs = MoleculeRecord.objects.all()
+    if name:
+        qs = qs.filter(name__icontains=name)
+    if formula:
+        qs = qs.filter(molecular_formula__iexact=formula)
+    return list(qs)
 
-    queryset = ReactionRecord.objects.all()
-    serializer_class = ReactionRecordSerializer
 
+@molecules.post("/", response={201: MoleculeOut})
+def create_molecule(request, payload: MoleculeIn):
+    mol = MoleculeRecord.objects.create(**payload.dict())
+    return Status(201, mol)
+
+
+@molecules.get("/{molecule_id}", response=MoleculeOut)
+def get_molecule(request, molecule_id: int):
+    return get_object_or_404(MoleculeRecord, pk=molecule_id)
+
+
+@molecules.put("/{molecule_id}", response=MoleculeOut)
+def update_molecule(request, molecule_id: int, payload: MoleculeIn):
+    mol = get_object_or_404(MoleculeRecord, pk=molecule_id)
+    for field, value in payload.dict().items():
+        setattr(mol, field, value)
+    mol.save()
+    return mol
+
+
+@molecules.patch("/{molecule_id}", response=MoleculeOut)
+def partial_update_molecule(request, molecule_id: int, payload: MoleculePatch):
+    mol = get_object_or_404(MoleculeRecord, pk=molecule_id)
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(mol, field, value)
+    mol.save()
+    return mol
+
+
+@molecules.delete("/{molecule_id}", response={204: None})
+def delete_molecule(request, molecule_id: int):
+    mol = get_object_or_404(MoleculeRecord, pk=molecule_id)
+    mol.delete()
+    return Status(204, None)
+
+
+@molecules.get("/search/", response=List[MoleculeOut])
+def search_molecules(request, q: str = ""):
+    """Simple text-based search across name, SMILES, and InChIKey."""
+    if not q:
+        return []
+    qs = MoleculeRecord.objects.filter(
+        Q(name__icontains=q) | Q(smiles__icontains=q) | Q(inchikey__iexact=q)
+    )
+    return list(qs)
+
+
+api.add_router("/molecules", molecules)
+
+# ── Reaction registry ─────────────────────────────────────────────────────────
+
+reactions = Router(tags=["reactions"])
+
+
+@reactions.get("/", response=List[ReactionOut])
+def list_reactions(request):
+    return list(ReactionRecord.objects.all())
+
+
+@reactions.post("/", response={201: ReactionOut})
+def create_reaction(request, payload: ReactionIn):
+    rxn = ReactionRecord.objects.create(**payload.dict())
+    return Status(201, rxn)
+
+
+@reactions.get("/{reaction_id}", response=ReactionOut)
+def get_reaction(request, reaction_id: int):
+    return get_object_or_404(ReactionRecord, pk=reaction_id)
+
+
+@reactions.put("/{reaction_id}", response=ReactionOut)
+def update_reaction(request, reaction_id: int, payload: ReactionIn):
+    rxn = get_object_or_404(ReactionRecord, pk=reaction_id)
+    for field, value in payload.dict().items():
+        setattr(rxn, field, value)
+    rxn.save()
+    return rxn
+
+
+@reactions.delete("/{reaction_id}", response={204: None})
+def delete_reaction(request, reaction_id: int):
+    rxn = get_object_or_404(ReactionRecord, pk=reaction_id)
+    rxn.delete()
+    return Status(204, None)
+
+
+api.add_router("/reactions", reactions)
 
 # ── Chemistry operations ──────────────────────────────────────────────────────
 
 
-class ConvertFormatView(APIView):
+@api.post("/convert/", response=ConvertResponse, tags=["chemistry"])
+def convert_format_view(request, payload: ConvertRequest):
     """Convert a molecule between chemistry file formats."""
-
-    def post(self, request: Request) -> Response:
-        ser = ConvertRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        result = convert_format(
-            ser.validated_data["data"],
-            ser.validated_data["from_format"],
-            ser.validated_data["to_format"],
-        )
-        return Response(result)
+    result = convert_format(payload.data, payload.from_format, payload.to_format)
+    return ConvertResponse(**result)
 
 
-class CanonicalizeView(APIView):
+@api.post("/canonicalize/", response=CanonicalizeResponse, tags=["chemistry"])
+def canonicalize_view(request, payload: CanonicalizeRequest):
     """Canonicalize a SMILES string."""
-
-    def post(self, request: Request) -> Response:
-        ser = CanonicalizeSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        result = canonicalize(ser.validated_data["smiles"])
-        return Response(result)
+    result = canonicalize(payload.smiles)
+    return CanonicalizeResponse(**result)
 
 
-class PropertiesView(APIView):
+@api.post("/properties/", response=PropertiesResponse, tags=["chemistry"])
+def properties_view(request, payload: PropertiesRequest):
     """Compute molecular properties for a SMILES string."""
-
-    def post(self, request: Request) -> Response:
-        ser = PropertiesRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        result = get_properties(ser.validated_data["smiles"])
-        return Response(result)
+    result = get_properties(payload.smiles)
+    return PropertiesResponse(**result)
 
 
-class Depict2DView(APIView):
+@api.post("/depict/", response=Depict2DResponse, tags=["chemistry"])
+def depict_view(request, payload: Depict2DRequest):
     """Generate a 2D SVG depiction from a SMILES string."""
-
-    def post(self, request: Request) -> Response:
-        ser = Depict2DRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        result = depict_2d(
-            ser.validated_data["smiles"],
-            ser.validated_data.get("width", 300),
-            ser.validated_data.get("height", 200),
-        )
-        return Response(result)
+    result = depict_2d(payload.smiles, payload.width, payload.height)
+    return Depict2DResponse(**result)
 
 
-class StructureSearchView(APIView):
+@api.post("/search/", response=SearchResponse, tags=["chemistry"])
+def structure_search_view(request, payload: SearchRequest):
     """Search the molecule registry using substructure / similarity matching."""
+    qs = MoleculeRecord.objects.filter(smiles__icontains=payload.query)[: payload.max_results]
+    results = [
+        SearchResult(
+            molecule_id=str(m.pk),
+            smiles=m.smiles,
+            name=m.name,
+            score=1.0,
+        )
+        for m in qs
+    ]
+    return SearchResponse(results=results, ok=True)
 
-    def post(self, request: Request) -> Response:
-        ser = SearchRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-
-        query = ser.validated_data["query"]
-        search_type = ser.validated_data["search_type"]
-        max_results = ser.validated_data.get("max_results", 50)
-
-        # Simple text-based fallback search (replace with RDKit fingerprint
-        # search for production use)
-        qs = MoleculeRecord.objects.filter(smiles__icontains=query)[:max_results]
-        results = [
-            {
-                "molecule_id": str(m.pk),
-                "smiles": m.smiles,
-                "name": m.name,
-                "score": 1.0,
-            }
-            for m in qs
-        ]
-        return Response({"results": results, "ok": True, "error": ""})

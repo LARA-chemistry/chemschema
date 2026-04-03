@@ -1,10 +1,13 @@
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    './index.html',
-    './src/**/*.{vue,js,ts,jsx,tsx}',
-    './demo/**/*.{vue,js,ts,jsx,tsx}',
-  ],
+/**
+ * Shared Tailwind CSS theme configuration.
+ *
+ * Imported by both vite.config.ts (dev/preview) and vite.lib.config.ts
+ * (library build) so the theme only needs to be maintained in one place.
+ */
+
+import type { Config } from 'tailwindcss'
+
+export const tailwindConfig: Omit<Config, 'content'> = {
   theme: {
     extend: {
       colors: {

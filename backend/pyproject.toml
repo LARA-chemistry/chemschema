@@ -40,7 +40,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "django>=4.2",
-    "djangorestframework>=3.14",
+    "django-ninja>=1.6",
     "grpcio>=1.60",
     "grpcio-tools>=1.60",
     "protobuf>=4.25",
@@ -59,7 +59,6 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "django-stubs>=5.0",
-    "djangorestframework-stubs>=3.15",
 ]
 
 [project.urls]
