@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package chemschema;
+
+option java_package = "io.chemschema.proto";
+option java_outer_classname = "ChemSchemaProto";
+option java_multiple_files = true;
+
+// ─── Molecule ─────────────────────────────────────────────────────────────────
+
+message Atom {
+  int32  index  = 1;
+  string symbol = 2;
+  float  x      = 3;
+  float  y      = 4;
+  float  z      = 5;
+  int32  charge = 6;
+  int32  isotope = 7;
+  int32  implicit_hydrogens = 8;
+}
+
+message Bond {
+  int32 index      = 1;
+  int32 begin_atom = 2;
+  int32 end_atom   = 3;
+  // 1=single, 2=double, 3=triple, 4=aromatic
+  int32 order      = 4;
+  // 0=none, 1=up, 6=down (wedge/dash stereo)
+  int32 stereo     = 5;
+}
+
+message Molecule {
+  string          id     = 1;
+  string          name   = 2;
+  repeated Atom   atoms  = 3;
+  repeated Bond   bonds  = 4;
+  map<string, string> properties = 5;
+}
+
+// ─── Reaction ─────────────────────────────────────────────────────────────────
+
+message Reaction {
+  string             id        = 1;
+  string             name      = 2;
+  repeated Molecule  reactants = 3;
+  repeated Molecule  products  = 4;
+  repeated Molecule  agents    = 5;
+}
+
+// ─── Format conversion ────────────────────────────────────────────────────────
+
+enum ChemFormat {
+  SMILES   = 0;
+  MOL      = 1;
+  SDF      = 2;
+  INCHI    = 3;
+  INCHIKEY = 4;
+  CML      = 5;
+  RXN      = 6;
+  RSMILES  = 7;
+}
+
+message ConvertRequest {
+  string     data         = 1;
+  ChemFormat from_format  = 2;
+  ChemFormat to_format    = 3;
+}
+
+message ConvertResponse {
+  string data  = 1;
+  bool   ok    = 2;
+  string error = 3;
+}
+
+// ─── Canonicalization / standardisation ───────────────────────────────────────
+
+message CanonicalizeRequest {
+  string smiles = 1;
+}
+
+message CanonicalizeResponse {
+  string smiles  = 1;
+  bool   ok      = 2;
+  string error   = 3;
+}
+
+// ─── Molecule properties ──────────────────────────────────────────────────────
+
+message MoleculePropertiesRequest {
+  string smiles = 1;
+}
+
+message MolecularProperties {
+  double molecular_weight       = 1;
+  string molecular_formula      = 2;
+  double exact_molecular_weight = 3;
+  double logp                   = 4;
+  int32  num_rotatable_bonds    = 5;
+  int32  num_h_donors           = 6;
+  int32  num_h_acceptors        = 7;
+  int32  num_rings              = 8;
+  int32  num_aromatic_rings     = 9;
+  string inchi                  = 10;
+  string inchikey               = 11;
+  string canonical_smiles       = 12;
+}
+
+message MoleculePropertiesResponse {
+  MolecularProperties properties = 1;
+  bool                ok         = 2;
+  string              error      = 3;
+}
+
+// ─── Structure search ─────────────────────────────────────────────────────────
+
+enum SearchType {
+  SUBSTRUCTURE = 0;
+  SIMILARITY   = 1;
+  EXACT        = 2;
+}
+
+message SearchRequest {
+  string     query      = 1;
+  SearchType search_type = 2;
+  float      threshold  = 3;
+  int32      max_results = 4;
+}
+
+message SearchResult {
+  string molecule_id = 1;
+  string smiles      = 2;
+  string name        = 3;
+  float  score       = 4;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+  bool                  ok      = 2;
+  string                error   = 3;
+}
+
+// ─── 2D coordinate generation ─────────────────────────────────────────────────
+
+message Depict2DRequest {
+  string smiles = 1;
+  int32  width  = 2;
+  int32  height = 3;
+}
+
+message Depict2DResponse {
+  Molecule molecule = 1;   // molecule with 2D coordinates
+  string   svg      = 2;   // optional SVG depiction
+  bool     ok       = 3;
+  string   error    = 4;
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+service ChemSchemaService {
+  // Format interconversion
+  rpc ConvertFormat (ConvertRequest)    returns (ConvertResponse);
+  // Canonicalize a SMILES string
+  rpc Canonicalize  (CanonicalizeRequest) returns (CanonicalizeResponse);
+  // Compute molecular properties
+  rpc GetProperties (MoleculePropertiesRequest) returns (MoleculePropertiesResponse);
+  // 2D coordinate generation + SVG depiction
+  rpc Depict2D      (Depict2DRequest)   returns (Depict2DResponse);
+  // Structure search (server-side registry)
+  rpc Search        (SearchRequest)     returns (SearchResponse);
+}

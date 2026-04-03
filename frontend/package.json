@@ -1,0 +1,74 @@
+{
+  "name": "chemschema-editor",
+  "version": "0.1.0",
+  "description": "A reactive Vue.js chemistry (2D structures & reactions) editor with gRPC-web and REST backend support",
+  "keywords": [
+    "chemistry",
+    "editor",
+    "molecules",
+    "reactions",
+    "smiles",
+    "molfile",
+    "vue",
+    "vue3",
+    "tailwind",
+    "2d-structure"
+  ],
+  "author": "LARA Chemistry",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/LARA-chemistry/chemschema",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LARA-chemistry/chemschema.git",
+    "directory": "frontend"
+  },
+  "bugs": {
+    "url": "https://github.com/LARA-chemistry/chemschema/issues"
+  },
+  "main": "./dist/chemschema-editor.umd.cjs",
+  "module": "./dist/chemschema-editor.js",
+  "exports": {
+    ".": {
+      "import": "./dist/chemschema-editor.js",
+      "require": "./dist/chemschema-editor.umd.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:lib": "vite build --config vite.lib.config.js",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .vue,.js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .vue,.js,.jsx,.ts,.tsx --fix",
+    "format": "prettier --write src/**/*.{vue,js,ts,css}",
+    "type-check": "vue-tsc --noEmit",
+    "proto:gen": "node scripts/gen-proto.js"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.3",
+    "@vitest/coverage-v8": "^3.1.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.23.0",
+    "eslint-plugin-vue": "^9.33.0",
+    "postcss": "^8.5.3",
+    "prettier": "^3.5.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.2.4",
+    "vitest": "^3.1.1",
+    "vue-tsc": "^2.2.8"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  }
+}

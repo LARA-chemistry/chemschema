@@ -1,0 +1,101 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (build only, no upload)"
+        required: false
+        default: "false"
+
+jobs:
+  build:
+    name: Build distribution packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Verify distribution artefacts
+        run: ls -la dist/
+
+      - name: Store distribution artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chemschema-python-dist
+          path: backend/dist/
+          if-no-files-found: error
+
+  # ── PyPI upload ─────────────────────────────────────────────────────────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'release' || github.event.inputs.dry_run == 'false' }}
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/chemschema
+
+    permissions:
+      id-token: write   # OIDC trusted publishing
+
+    steps:
+      - name: Download distribution artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: chemschema-python-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  # ── TestPyPI upload (optional dry run) ─────────────────────────────────────
+  publish-testpypi:
+    name: Publish to TestPyPI (dry run)
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run == 'true' }}
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/chemschema
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distribution artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: chemschema-python-dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
